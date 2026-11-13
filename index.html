@@ -1,0 +1,334 @@
+!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sky Drift</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0b1020;
+      color: white;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    canvas {
+      border: 3px solid #3b4d78;
+      background: linear-gradient(#7ec9ff, #d9f3ff 55%, #a8d878 56%, #7ab54f 100%);
+      display: block;
+      box-shadow: 0 0 30px rgba(0,0,0,0.4);
+    }
+
+    #hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 16px;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div style="position: relative;">
+    <div id="hud">
+      <div>ALT: <span id="alt">0</span> ft</div>
+      <div>SPEED: <span id="speed">0</span> mph</div>
+      <div>THROTTLE: <span id="throttle">0</span>%</div>
+    </div>
+    <canvas id="game" width="900" height="500"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const altEl = document.getElementById('alt');
+    const speedEl = document.getElementById('speed');
+    const throttleEl = document.getElementById('throttle');
+
+    const keys = {
+      w: false,
+      s: false,
+      e: false,
+      up: false,
+      down: false
+    };
+
+    const plane = {
+      x: 150,
+      y: canvas.height * 0.45,
+      vx: 0,
+      vy: 0,
+      pitch: 0,       // -1 to +1
+      throttle: 0,    // 0..100
+      speed: 0,       // mph-ish
+      spoiler: false,
+      crashed: false
+    };
+
+    const clouds = [
+      { x: 100, y: 80, r: 22 },
+      { x: 250, y: 150, r: 18 },
+      { x: 520, y: 90, r: 26 },
+      { x: 760, y: 120, r: 20 },
+      { x: 860, y: 70, r: 16 }
+    ];
+
+    const ground = {
+      height: 70
+    };
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'w' || e.key === 'W') keys.w = true;
+      if (e.key === 's' || e.key === 'S') keys.s = true;
+      if (e.key === 'e' || e.key === 'E') keys.e = true;
+      if (e.key === 'ArrowUp') keys.up = true;
+      if (e.key === 'ArrowDown') keys.down = true;
+    });
+
+    document.addEventListener('keyup', e => {
+      if (e.key === 'w' || e.key === 'W') keys.w = false;
+      if (e.key === 's' || e.key === 'S') keys.s = false;
+      if (e.key === 'e' || e.key === 'E') keys.e = false;
+      if (e.key === 'ArrowUp') keys.up = false;
+      if (e.key === 'ArrowDown') keys.down = false;
+    });
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function updatePlane() {
+      if (plane.crashed) return;
+
+      // Throttle
+      if (keys.w) {
+        plane.throttle += 1.2;
+      } else {
+        plane.throttle -= 0.8;
+      }
+
+      plane.throttle = clamp(plane.throttle, 0, 100);
+
+      // Pitch control
+      if (keys.up) {
+        plane.pitch -= 0.04;
+      }
+      if (keys.down) {
+        plane.pitch += 0.04;
+      }
+
+      plane.pitch = clamp(plane.pitch, -1, 1);
+
+      // More speed when throttle higher
+      const throttleForce = plane.throttle / 100 * 1.8;
+      plane.speed += throttleForce;
+
+      // Brakes
+      if (keys.s) {
+        plane.speed -= 0.7;
+      }
+
+      // Drag from air
+      plane.speed -= 0.06 + (plane.spoiler ? 0.14 : 0);
+      plane.speed = clamp(plane.speed, 0, 130);
+
+      // Spoiler increases drag and reduces lift
+      plane.spoiler = !!keys.e;
+
+      const gravity = 0.23;
+      let lift = 0;
+
+      // Lift based on speed and pitch
+      lift = (plane.speed * 0.12) * (1.4 - Math.abs(plane.pitch) * 0.7);
+
+      // If nose points up, plane gains lift. If nose down, less lift.
+      if (plane.pitch > 0) {
+        lift *= 1.12;
+      } else if (plane.pitch < 0) {
+        lift *= 0.85;
+      }
+
+      if (plane.spoiler) {
+        lift *= 0.42;
+      }
+
+      // Vertical movement
+      plane.vy += gravity - lift;
+      plane.vy *= 0.97;
+      plane.y += plane.vy;
+
+      // Keep plane from flying too far off-screen
+      if (plane.y < 30) {
+        plane.y = 30;
+        plane.vy = 0;
+      }
+
+      // Crash if it hits the ground
+      if (plane.y + 16 >= canvas.height - ground.height) {
+        plane.y = canvas.height - ground.height - 16;
+        if (plane.speed > 25) {
+          plane.crashed = true;
+        } else {
+          plane.vy = 0;
+        }
+      }
+
+      // Small forward movement over time
+      plane.x += plane.speed * 0.85;
+
+      // Wrap scenery-ish effect to keep plane moving forward
+      if (plane.x > canvas.width * 0.8) {
+        plane.x = canvas.width * 0.8;
+      }
+
+      // HUD values
+      const altitude = Math.max(0, Math.round((canvas.height - ground.height - plane.y) * 2.4));
+      altEl.textContent = altitude;
+      speedEl.textContent = Math.round(plane.speed * 7);
+      throttleEl.textContent = Math.round(plane.throttle);
+
+      // Slight pitch visually
+      plane.pitch *= 0.97;
+    }
+
+    function drawCloud(x, y, r) {
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.arc(x + r * 0.8, y - 6, r * 0.9, 0, Math.PI * 2);
+      ctx.arc(x - r * 0.8, y - 4, r * 0.85, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawGround() {
+      ctx.fillStyle = '#6d8f3e';
+      ctx.fillRect(0, canvas.height - ground.height, canvas.width, ground.height);
+
+      ctx.fillStyle = '#8fbf58';
+      for (let i = 0; i < 25; i++) {
+        const x = i * 42;
+        const h = 12 + (i % 5) * 8;
+        ctx.beginPath();
+        ctx.moveTo(x, canvas.height - ground.height);
+        ctx.lineTo(x + 25, canvas.height - ground.height - h);
+        ctx.lineTo(x + 50, canvas.height - ground.height);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    function drawPlane() {
+      ctx.save();
+      ctx.translate(plane.x, plane.y);
+
+      // plane tilt
+      ctx.rotate(plane.pitch * 0.9);
+
+      // wings
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(-28, -3, 56, 6);
+
+      // body
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(-18, -6, 38, 12);
+
+      // nose
+      ctx.fillStyle = '#e74c3c';
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(30, -8);
+      ctx.lineTo(30, 8);
+      ctx.closePath();
+      ctx.fill();
+
+      // tail
+      ctx.fillStyle = '#d0d0d0';
+      ctx.fillRect(-26, -10, 10, 4);
+      ctx.fillRect(-26, 6, 10, 4);
+
+      // cockpit
+      ctx.fillStyle = '#6ec5ff';
+      ctx.fillRect(-2, -4, 10, 8);
+
+      // spoiler
+      if (plane.spoiler) {
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(-8, -14, 16, 3);
+      }
+
+      ctx.restore();
+    }
+
+    function drawSky() {
+      // sun
+      ctx.fillStyle = '#ffd65a';
+      ctx.beginPath();
+      ctx.arc(760, 90, 38, 0, Math.PI * 2);
+      ctx.fill();
+
+      // clouds
+      for (const c of clouds) {
+        drawCloud(c.x, c.y, c.r);
+      }
+    }
+
+    function drawMessage() {
+      if (!plane.crashed) return;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(230, 160, 440, 120);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 34px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('CRASHED', canvas.width / 2, 220);
+
+      ctx.font = '20px Arial';
+      ctx.fillText('Press R to restart', canvas.width / 2, 252);
+    }
+
+    function restart() {
+      plane.x = 150;
+      plane.y = canvas.height * 0.45;
+      plane.vx = 0;
+      plane.vy = 0;
+      plane.pitch = 0;
+      plane.throttle = 0;
+      plane.speed = 0;
+      plane.spoiler = false;
+      plane.crashed = false;
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'r' || e.key === 'R') {
+        if (plane.crashed) restart();
+      }
+    });
+
+    function loop() {
+      updatePlane();
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      drawSky();
+      drawGround();
+      drawPlane();
+
+      if (plane.crashed) {
+        drawMessage();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>
