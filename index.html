@@ -414,13 +414,21 @@
       <button class="control-button" id="reset-button" type="button" title="Restart flight (R)">RESTART</button>
     </div>
 
-    <div class="touch-controls" aria-label="Touch flight controls">
-      <div class="touch-pad">
-        <button class="touch-key" type="button" data-control="pitchUp" aria-label="Pitch up">↑</button>
-        <button class="touch-key" type="button" data-control="rollLeft" aria-label="Bank left">←</button>
-        <button class="touch-key" type="button" data-control="rollRight" aria-label="Bank right">→</button>
-        <button class="touch-key" type="button" data-control="pitchDown" aria-label="Pitch down">↓</button>
-      </div>
+    <div class="touch-pad" aria-label="Flight controls">
+  <button class="touch-key" type="button" data-control="rollLeft"
+          aria-label="Bank left">◀<small>BANK</small></button>
+  <button class="touch-key" type="button" data-control="pitchUp"
+          aria-label="Pitch up">▲<small>PITCH</small></button>
+  <button class="touch-key" type="button" data-control="rollRight"
+          aria-label="Bank right">▶<small>BANK</small></button>
+
+  <button class="touch-key" type="button" data-control="rudderLeft"
+          aria-label="Rudder left">◀<small>RUDDER</small></button>
+  <button class="touch-key" type="button" data-control="pitchDown"
+          aria-label="Pitch down">▼<small>PITCH</small></button>
+  <button class="touch-key" type="button" data-control="rudderRight"
+          aria-label="Rudder right">▶<small>RUDDER</small></button>
+</div>
       <div class="touch-side">
         <div class="throttle-control"><label for="touch-throttle"><span>THROTTLE</span><span id="touch-throttle-value">36%</span></label><input id="touch-throttle" type="range" min="0" max="100" value="36" aria-label="Throttle"/></div>
         <button class="touch-key" type="button" data-action="brake" aria-label="Toggle brakes">BRAKE</button>
