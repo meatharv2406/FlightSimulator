@@ -1,334 +1,1113 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sky Drift</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07131f" />
+  <title>Skybound — 3D Flight Simulator</title>
   <style>
-    body {
-      margin: 0;
-      background: #0b1020;
-      color: white;
-      font-family: Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #eef7ff;
+      background: #07131f;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      --panel: rgba(8, 20, 32, .78);
+      --line: rgba(203, 229, 248, .15);
+      --muted: #9db1c1;
+      --cyan: #75e4ef;
+      --amber: #ffc96a;
     }
 
-    canvas {
-      border: 3px solid #3b4d78;
-      background: linear-gradient(#7ec9ff, #d9f3ff 55%, #a8d878 56%, #7ab54f 100%);
-      display: block;
-      box-shadow: 0 0 30px rgba(0,0,0,0.4);
-    }
+    * { box-sizing: border-box; }
 
-    #hud {
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: #77bde8; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+
+    #sim { position: fixed; inset: 0; overflow: hidden; }
+    #scene { display: block; width: 100%; height: 100%; }
+    #scene canvas { display: block; width: 100%; height: 100%; }
+
+    .topbar {
       position: absolute;
-      top: 16px;
-      left: 16px;
-      background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 16px;
-      line-height: 1.4;
+      z-index: 3;
+      top: max(14px, env(safe-area-inset-top));
+      left: max(16px, env(safe-area-inset-left));
+      right: max(16px, env(safe-area-inset-right));
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
       pointer-events: none;
     }
-  </style>
-</head>
-<body>
-  <div style="position: relative;">
-    <div id="hud">
-      <div>ALT: <span id="alt">0</span> ft</div>
-      <div>SPEED: <span id="speed">0</span> mph</div>
-      <div>THROTTLE: <span id="throttle">0</span>%</div>
-    </div>
-    <canvas id="game" width="900" height="500"></canvas>
-  </div>
 
-  <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+    .brand, .top-actions { pointer-events: auto; }
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .brand-mark {
+      display: grid;
+      width: 39px;
+      height: 39px;
+      place-items: center;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 12px;
+      background: rgba(10,26,40,.72);
+      color: var(--cyan);
+      box-shadow: 0 8px 26px rgba(0,0,0,.15);
+    }
+    .brand-mark svg { width: 22px; height: 22px; }
+    .brand-name { font-size: 15px; font-weight: 800; letter-spacing: .13em; }
+    .brand-sub { margin-top: 2px; color: rgba(255,255,255,.72); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+    .top-actions { display: flex; gap: 8px; }
 
-    const altEl = document.getElementById('alt');
-    const speedEl = document.getElementById('speed');
-    const throttleEl = document.getElementById('throttle');
+    .icon-button, .control-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+      height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--panel);
+      color: #f1f8ff;
+      cursor: pointer;
+      backdrop-filter: blur(14px);
+      transition: background .18s, border-color .18s, transform .18s;
+    }
+    .icon-button:hover, .control-button:hover { border-color: rgba(117,228,239,.5); background: rgba(17,42,58,.92); }
+    .icon-button:active, .control-button:active { transform: scale(.96); }
+    .icon-button svg { width: 17px; height: 17px; }
+    .control-button { gap: 7px; color: #c1d1dc; font-size: 11px; font-weight: 700; }
+    .control-button.active { color: var(--cyan); border-color: rgba(117,228,239,.55); }
 
-    const keys = {
-      w: false,
-      s: false,
-      e: false,
-      up: false,
-      down: false
-    };
-
-    const plane = {
-      x: 150,
-      y: canvas.height * 0.45,
-      vx: 0,
-      vy: 0,
-      pitch: 0,       // -1 to +1
-      throttle: 0,    // 0..100
-      speed: 0,       // mph-ish
-      spoiler: false,
-      crashed: false
-    };
-
-    const clouds = [
-      { x: 100, y: 80, r: 22 },
-      { x: 250, y: 150, r: 18 },
-      { x: 520, y: 90, r: 26 },
-      { x: 760, y: 120, r: 20 },
-      { x: 860, y: 70, r: 16 }
-    ];
-
-    const ground = {
-      height: 70
-    };
-
-    document.addEventListener('keydown', e => {
-      if (e.key === 'w' || e.key === 'W') keys.w = true;
-      if (e.key === 's' || e.key === 'S') keys.s = true;
-      if (e.key === 'e' || e.key === 'E') keys.e = true;
-      if (e.key === 'ArrowUp') keys.up = true;
-      if (e.key === 'ArrowDown') keys.down = true;
-    });
-
-    document.addEventListener('keyup', e => {
-      if (e.key === 'w' || e.key === 'W') keys.w = false;
-      if (e.key === 's' || e.key === 'S') keys.s = false;
-      if (e.key === 'e' || e.key === 'E') keys.e = false;
-      if (e.key === 'ArrowUp') keys.up = false;
-      if (e.key === 'ArrowDown') keys.down = false;
-    });
-
-    function clamp(value, min, max) {
-      return Math.min(Math.max(value, min), max);
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: 0 12px 35px rgba(0,0,0,.16);
+      backdrop-filter: blur(16px);
     }
 
-    function updatePlane() {
+    .flight-data {
+      position: absolute;
+      z-index: 2;
+      top: 76px;
+      left: max(16px, env(safe-area-inset-left));
+      width: 220px;
+      padding: 14px;
+    }
+    .panel-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #72e0a1; box-shadow: 0 0 12px #72e0a1; }
+    .primary-readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .readout {
+      min-height: 72px;
+      padding: 10px 9px 8px;
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 10px;
+      background: rgba(255,255,255,.035);
+    }
+    .readout-label { color: #a9bac7; font-size: 9px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+    .readout-value { margin-top: 4px; font-size: 25px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+    .readout-unit { margin-left: 3px; color: #a9bac7; font-size: 9px; font-weight: 600; letter-spacing: 0; }
+    .secondary-readouts { display: grid; grid-template-columns: 1fr 1fr; margin-top: 11px; }
+    .secondary { display: flex; align-items: center; justify-content: space-between; padding: 7px 2px; border-top: 1px solid rgba(255,255,255,.08); }
+    .secondary span:first-child { color: #9db1c1; font-size: 10px; }
+    .secondary strong { color: #edf7ff; font-size: 11px; font-variant-numeric: tabular-nums; }
+    .throttle-wrap { margin-top: 8px; }
+    .throttle-label { display: flex; justify-content: space-between; color: #a9bac7; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .throttle-track { height: 4px; margin-top: 7px; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,.12); }
+    .throttle-fill { width: 36%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #75e4ef, #c2f7d8); box-shadow: 0 0 12px rgba(117,228,239,.55); }
+
+    .mission {
+      position: absolute;
+      z-index: 2;
+      top: 76px;
+      left: 50%;
+      width: min(330px, calc(100vw - 32px));
+      padding: 12px 15px;
+      transform: translateX(-50%);
+      text-align: center;
+    }
+    .mission-kicker { color: var(--cyan); font-size: 9px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    .mission-title { margin-top: 4px; font-size: 13px; font-weight: 750; }
+    .mission-detail { margin-top: 4px; color: #a9bac7; font-size: 10px; }
+    .mission-progress { height: 3px; margin-top: 10px; border-radius: 4px; background: rgba(255,255,255,.13); }
+    .mission-progress > span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--cyan); transition: width .3s; }
+
+    .compass-panel {
+      position: absolute;
+      z-index: 2;
+      top: 76px;
+      right: max(16px, env(safe-area-inset-right));
+      width: 152px;
+      padding: 10px 12px 8px;
+      text-align: center;
+    }
+    .compass-title { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    #compass { display: block; width: 128px; height: 46px; margin: 3px auto 0; }
+    .heading-value { margin-top: -1px; color: var(--cyan); font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .05em; }
+
+    .status-pill {
+      position: absolute;
+      z-index: 2;
+      top: 183px;
+      right: max(16px, env(safe-area-inset-right));
+      padding: 7px 10px;
+      color: #c9d8e3;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .status-pill.warning { color: #ffd47c; border-color: rgba(255,201,106,.35); }
+    .status-pill.danger { color: #ff9a90; border-color: rgba(255,105,95,.45); }
+
+    .map-panel {
+      position: absolute;
+      z-index: 2;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      left: max(16px, env(safe-area-inset-left));
+      width: 154px;
+      padding: 9px;
+    }
+    .map-heading { display: flex; justify-content: space-between; color: #9db1c1; font-size: 9px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    #map { display: block; width: 136px; height: 100px; margin-top: 7px; border-radius: 8px; }
+
+    .bottom-bar {
+      position: absolute;
+      z-index: 2;
+      right: max(18px, env(safe-area-inset-right));
+      bottom: max(18px, env(safe-area-inset-bottom));
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .key-hint { margin-right: 7px; color: rgba(255,255,255,.72); font-size: 10px; text-shadow: 0 1px 5px rgba(0,0,0,.5); }
+    kbd {
+      padding: 2px 5px;
+      border: 1px solid rgba(255,255,255,.26);
+      border-radius: 4px;
+      background: rgba(8,20,32,.55);
+      color: #edf7ff;
+      font: inherit;
+      font-size: 9px;
+    }
+
+    .touch-controls { display: none; }
+    .overlay {
+      position: absolute;
+      z-index: 5;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      background: rgba(4,13,22,.48);
+      backdrop-filter: blur(5px);
+    }
+    .overlay[hidden] { display: none; }
+    .overlay-card {
+      width: min(400px, 100%);
+      padding: 28px;
+      border: 1px solid rgba(255,255,255,.17);
+      border-radius: 20px;
+      background: rgba(9,24,37,.92);
+      text-align: center;
+      box-shadow: 0 24px 80px rgba(0,0,0,.32);
+    }
+    .overlay-icon { color: var(--cyan); font-size: 32px; }
+    .overlay-card h1 { margin: 12px 0 7px; font-size: 24px; }
+    .overlay-card p { margin: 0; color: #b2c2ce; font-size: 13px; line-height: 1.6; }
+    .overlay-card .control-button { margin-top: 20px; padding: 0 20px; color: #07131f; background: var(--cyan); border: 0; }
+    #error-message { color: #ffaaa1; }
+
+    @media (max-width: 760px) {
+      .brand-mark { width: 34px; height: 34px; border-radius: 10px; }
+      .brand-name { font-size: 13px; }
+      .brand-sub { font-size: 8px; }
+      .topbar { top: max(10px, env(safe-area-inset-top)); left: max(11px, env(safe-area-inset-left)); right: max(11px, env(safe-area-inset-right)); }
+      .flight-data { top: 57px; left: max(10px, env(safe-area-inset-left)); width: 164px; padding: 9px; border-radius: 11px; }
+      .panel-heading { margin-bottom: 7px; font-size: 8px; }
+      .readout { min-height: 57px; padding: 7px; }
+      .readout-value { font-size: 20px; }
+      .readout-label { font-size: 8px; }
+      .secondary { padding: 5px 1px; }
+      .secondary span:first-child { font-size: 9px; }
+      .secondary strong { font-size: 10px; }
+      .throttle-wrap { margin-top: 5px; }
+      .mission { top: 57px; width: 170px; padding: 9px 10px; }
+      .mission-title { font-size: 11px; }
+      .mission-detail { font-size: 9px; }
+      .compass-panel { top: 57px; right: max(10px, env(safe-area-inset-right)); width: 120px; padding: 8px; }
+      #compass { width: 104px; height: 37px; }
+      .heading-value { font-size: 12px; }
+      .status-pill { top: 143px; right: max(10px, env(safe-area-inset-right)); padding: 6px 8px; font-size: 8px; }
+      .map-panel { bottom: max(220px, calc(env(safe-area-inset-bottom) + 210px)); left: max(10px, env(safe-area-inset-left)); width: 120px; padding: 7px; }
+      #map { width: 104px; height: 75px; margin-top: 5px; }
+      .bottom-bar { right: max(10px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); }
+      .bottom-bar .control-button { min-width: 36px; height: 36px; padding: 0 8px; font-size: 9px; }
+      .key-hint { display: none; }
+      .touch-controls {
+        position: absolute;
+        z-index: 3;
+        right: 12px;
+        bottom: max(63px, calc(env(safe-area-inset-bottom) + 56px));
+        left: 12px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        pointer-events: none;
+      }
+      .touch-pad { display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 46px); gap: 4px; pointer-events: auto; }
+      .touch-pad .touch-key:nth-child(1) { grid-column: 2; grid-row: 1; }
+      .touch-pad .touch-key:nth-child(2) { grid-column: 1; grid-row: 2; }
+      .touch-pad .touch-key:nth-child(3) { grid-column: 3; grid-row: 2; }
+      .touch-pad .touch-key:nth-child(4) { grid-column: 2; grid-row: 3; }
+      .touch-key {
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(255,255,255,.25);
+        border-radius: 13px;
+        background: rgba(8,20,32,.68);
+        color: #f4fbff;
+        font-size: 19px;
+        font-weight: 700;
+        user-select: none;
+        touch-action: none;
+        backdrop-filter: blur(10px);
+      }
+      .touch-key.pressed { border-color: var(--cyan); background: rgba(35,104,116,.85); }
+      .touch-side { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: auto; }
+      .touch-side .touch-key { width: 49px; height: 45px; font-size: 11px; }
+      .throttle-control { width: 110px; padding: 9px; border: 1px solid var(--line); border-radius: 12px; background: rgba(8,20,32,.72); backdrop-filter: blur(10px); }
+      .throttle-control label { display: flex; justify-content: space-between; color: #c1d1dc; font-size: 9px; }
+      .throttle-control input { width: 100%; margin: 8px 0 2px; accent-color: var(--cyan); }
+    }
+
+    @media (max-width: 390px) {
+      .mission { left: 53%; width: 150px; }
+      .compass-panel { width: 105px; }
+      #compass { width: 90px; }
+      .flight-data { width: 150px; }
+      .bottom-bar { gap: 4px; }
+      .bottom-bar .control-button { min-width: 32px; padding: 0 6px; }
+    }
+
+    @media (max-width: 760px) and (max-height: 700px) {
+      .map-panel { display: none; }
+    }
+
+    @media (max-width: 760px) and (max-height: 700px) and (orientation: landscape) {
+      .flight-data { top: 56px; width: min(230px, 32vw); padding: 7px; }
+      .panel-heading { margin-bottom: 5px; }
+      .primary-readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      .readout { min-height: 43px; padding: 5px 4px; }
+      .readout-label { font-size: 7px; letter-spacing: .04em; white-space: nowrap; }
+      .readout-value { font-size: 17px; }
+      .readout-unit { margin-left: 1px; font-size: 7px; }
+      .secondary-readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 5px; }
+      .secondary { flex-direction: column; align-items: flex-start; gap: 2px; padding: 5px 1px; }
+      .secondary span:first-child { font-size: 7px; }
+      .secondary strong { font-size: 9px; }
+      .throttle-wrap { margin-top: 3px; }
+      .throttle-label { font-size: 8px; }
+      .throttle-track { margin-top: 4px; }
+      .mission { top: 56px; width: min(220px, 28vw); padding: 8px; }
+      .mission-kicker { font-size: 8px; }
+      .mission-title { font-size: 10px; }
+      .mission-detail { font-size: 8px; }
+      .mission-progress { margin-top: 6px; }
+      .compass-panel { top: 56px; width: 108px; padding: 7px; }
+      #compass { width: 92px; height: 32px; }
+      .heading-value { font-size: 10px; }
+      .status-pill { top: 133px; padding: 5px 7px; font-size: 7px; }
+      .touch-controls { right: 8px; bottom: max(56px, calc(env(safe-area-inset-bottom) + 52px)); left: 8px; }
+      .touch-pad { grid-template-columns: repeat(3, 39px); grid-template-rows: repeat(3, 36px); gap: 3px; }
+      .touch-side { gap: 5px; }
+      .touch-side .touch-key { width: 43px; height: 36px; }
+      .throttle-control { width: 98px; padding: 7px; }
+      .bottom-bar { right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); }
+      .bottom-bar .control-button { min-width: 32px; height: 32px; padding: 0 7px; font-size: 8px; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="sim" aria-label="Skybound 3D flight simulator">
+    <div id="scene"></div>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 14.5 21 4l-7 17-3.1-7.1L3 14.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m10.9 13.9 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <div><div class="brand-name">SKYBOUND</div><div class="brand-sub">Flight simulator</div></div>
+      </div>
+      <div class="top-actions">
+        <button class="icon-button" id="camera-button" type="button" aria-label="Change camera" title="Change camera (C)">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h3l1.5-2h7l1.5 2h3v11H4v-11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="1.6"/></svg>
+        </button>
+        <button class="icon-button" id="pause-button" type="button" aria-label="Pause simulation" title="Pause (P)">
+          <svg id="pause-icon" viewBox="0 0 24 24" fill="none"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="flight-data panel" aria-label="Flight instruments">
+      <div class="panel-heading"><span>Flight instruments</span><span class="live-dot" id="live-dot"></span></div>
+      <div class="primary-readouts">
+        <div class="readout"><div class="readout-label">Airspeed</div><div class="readout-value"><span id="speed">38</span><span class="readout-unit">kt</span></div></div>
+        <div class="readout"><div class="readout-label">Altitude</div><div class="readout-value"><span id="altitude">0</span><span class="readout-unit">ft</span></div></div>
+        <div class="readout"><div class="readout-label">Vertical speed</div><div class="readout-value"><span id="vertical-speed">0</span><span class="readout-unit">fpm</span></div></div>
+        <div class="readout"><div class="readout-label">Distance</div><div class="readout-value"><span id="distance">0.0</span><span class="readout-unit">nm</span></div></div>
+      </div>
+      <div class="secondary-readouts">
+        <div class="secondary"><span>Throttle</span><strong id="throttle">36%</strong></div>
+        <div class="secondary"><span>Fuel</span><strong id="fuel">100%</strong></div>
+        <div class="secondary"><span>Flaps</span><strong id="flaps">UP</strong></div>
+        <div class="secondary"><span>Gear</span><strong id="gear">DOWN</strong></div>
+      </div>
+      <div class="throttle-wrap"><div class="throttle-label"><span>Engine power</span><span id="throttle-label">36%</span></div><div class="throttle-track"><div class="throttle-fill" id="throttle-fill"></div></div></div>
+    </section>
+
+    <section class="mission panel" aria-label="Mission">
+      <div class="mission-kicker">Flight plan · Island route</div>
+      <div class="mission-title" id="mission-title">Fly through the navigation gates</div>
+      <div class="mission-detail" id="mission-detail">Gate 1 · 3 remaining</div>
+      <div class="mission-progress"><span id="mission-progress"></span></div>
+    </section>
+
+    <section class="compass-panel panel" aria-label="Heading">
+      <div class="compass-title">Magnetic heading</div>
+      <canvas id="compass" width="256" height="92"></canvas>
+      <div class="heading-value"><span id="heading">000</span>° <span id="cardinal">N</span></div>
+    </section>
+    <div id="status" class="status-pill panel">On runway</div>
+
+    <section class="map-panel panel" aria-label="Navigation map">
+      <div class="map-heading"><span>Navigation</span><span id="map-scale">1.0 nm</span></div>
+      <canvas id="map" width="272" height="200"></canvas>
+    </section>
+
+    <div class="bottom-bar">
+      <div class="key-hint"><kbd>↑↓</kbd> pitch <kbd>←→</kbd> bank <kbd>A/D</kbd> rudder <kbd>W/S</kbd> throttle</div>
+      <button class="control-button" id="flaps-button" type="button" title="Toggle flaps (F)">FLAPS</button>
+      <button class="control-button active" id="gear-button" type="button" title="Toggle landing gear (G)">GEAR</button>
+      <button class="control-button" id="brake-button" type="button" title="Hold brakes (Space)">BRAKE</button>
+      <button class="control-button" id="reset-button" type="button" title="Restart flight (R)">RESTART</button>
+    </div>
+
+    <div class="touch-controls" aria-label="Touch flight controls">
+      <div class="touch-pad">
+        <button class="touch-key" type="button" data-control="pitchUp" aria-label="Pitch up">↑</button>
+        <button class="touch-key" type="button" data-control="rollLeft" aria-label="Bank left">←</button>
+        <button class="touch-key" type="button" data-control="rollRight" aria-label="Bank right">→</button>
+        <button class="touch-key" type="button" data-control="pitchDown" aria-label="Pitch down">↓</button>
+      </div>
+      <div class="touch-side">
+        <div class="throttle-control"><label for="touch-throttle"><span>THROTTLE</span><span id="touch-throttle-value">36%</span></label><input id="touch-throttle" type="range" min="0" max="100" value="36" aria-label="Throttle"/></div>
+        <button class="touch-key" type="button" data-action="brake" aria-label="Toggle brakes">BRAKE</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="overlay" hidden>
+      <div class="overlay-card">
+        <div class="overlay-icon" id="overlay-icon">Ⅱ</div>
+        <h1 id="overlay-title">Flight paused</h1>
+        <p id="overlay-copy">Take a breather. Your flight is waiting.</p>
+        <button class="control-button" id="overlay-action" type="button">RESUME FLIGHT</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    const sceneHost = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    sceneHost.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x86c8eb);
+    scene.fog = new THREE.Fog(0x86c8eb, 900, 6200);
+
+    const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 14000);
+    const clock = new THREE.Clock();
+    const hemi = new THREE.HemisphereLight(0xdff4ff, 0x59744d, 1.5);
+    scene.add(hemi);
+    const sunLight = new THREE.DirectionalLight(0xfff0d7, 2.5);
+    sunLight.position.set(-900, 1500, 900);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -700;
+    sunLight.shadow.camera.right = 700;
+    sunLight.shadow.camera.top = 700;
+    sunLight.shadow.camera.bottom = -700;
+    scene.add(sunLight);
+
+    const sun = new THREE.Mesh(
+      new THREE.SphereGeometry(58, 24, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffe6a3, fog: false })
+    );
+    sun.position.set(-1700, 1100, -4300);
+    scene.add(sun);
+
+    function terrainHeight(x, z) {
+      const flat = Math.max(Math.abs(x) / 170, Math.abs(z) / 760);
+      const blend = THREE.MathUtils.smoothstep(flat, 0.92, 1.5);
+      const hills = 16 + 17 * Math.sin(x * 0.0025 + z * 0.0012) +
+        13 * Math.sin(z * 0.0031 - x * 0.0017) +
+        8 * Math.sin(x * 0.007 + z * 0.005);
+      const mountain = Math.max(0, Math.sin(x * 0.00072 + z * 0.00048)) * 105;
+      return Math.max(0, (hills + mountain) * blend);
+    }
+
+    const terrainGeometry = new THREE.PlaneGeometry(12000, 12000, 170, 170);
+    terrainGeometry.rotateX(-Math.PI / 2);
+    const positions = terrainGeometry.attributes.position;
+    const colors = [];
+    const groundColor = new THREE.Color();
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      const z = positions.getZ(i);
+      const height = terrainHeight(x, z);
+      positions.setY(i, height);
+      const variation = THREE.MathUtils.clamp((height + Math.sin(x * .02) * 2) / 135, 0, 1);
+      groundColor.setHSL(0.255 - variation * 0.09, 0.34 + variation * .08, 0.34 - variation * .1);
+      colors.push(groundColor.r, groundColor.g, groundColor.b);
+    }
+    terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    terrainGeometry.computeVertexNormals();
+    const terrain = new THREE.Mesh(terrainGeometry, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 1, metalness: 0
+    }));
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+
+    const water = new THREE.Mesh(
+      new THREE.PlaneGeometry(20000, 20000),
+      new THREE.MeshStandardMaterial({ color: 0x4d9db9, roughness: .32, metalness: .08 })
+    );
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = -22;
+    scene.add(water);
+
+    function box(parent, width, height, depth, material, x, y, z) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    }
+
+    const runwayGroup = new THREE.Group();
+    scene.add(runwayGroup);
+    const asphalt = new THREE.MeshStandardMaterial({ color: 0x373f43, roughness: .93 });
+    const paint = new THREE.MeshStandardMaterial({ color: 0xf0eee0, roughness: .8 });
+    const runway = box(runwayGroup, 76, 1.2, 1320, asphalt, 0, .45, 0);
+    runway.receiveShadow = true;
+    box(runwayGroup, 122, .8, 210, new THREE.MeshStandardMaterial({ color: 0x69716b, roughness: 1 }), 0, .36, 820);
+    for (let z = -610; z <= 610; z += 68) box(runwayGroup, 1.4, .035, 34, paint, 0, 1.07, z);
+    for (const z of [-570, 570]) {
+      for (let i = -3; i <= 3; i++) box(runwayGroup, 2.2, .04, 25, paint, i * 7.5, 1.08, z);
+    }
+    for (const x of [-32, 32]) box(runwayGroup, 1.2, .035, 1280, paint, x, 1.07, 0);
+    const thresholdMaterial = new THREE.MeshStandardMaterial({ color: 0xffd77a, emissive: 0x432900, roughness: .6 });
+    for (const x of [-44, 44]) {
+      for (const z of [-645, 645]) {
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 6), thresholdMaterial);
+        lamp.position.set(x, 2.1, z);
+        runwayGroup.add(lamp);
+      }
+    }
+
+    const buildingMat = new THREE.MeshStandardMaterial({ color: 0x9ca9a8, roughness: .84 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x42545a, roughness: .8 });
+    box(scene, 100, 19, 62, buildingMat, 140, 9.5, 760);
+    box(scene, 104, 3, 66, roofMat, 140, 20, 760);
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0xd8d6c6, roughness: .7 });
+    box(scene, 17, 47, 17, towerMat, 210, 23.5, 735);
+    box(scene, 28, 8, 28, roofMat, 210, 51, 735);
+    const glass = new THREE.MeshStandardMaterial({ color: 0x85cde0, metalness: .18, roughness: .18 });
+    box(scene, 18, 8, 18, glass, 210, 51, 735);
+
+    let randomSeed = 713;
+    function random() {
+      randomSeed = (randomSeed * 16807) % 2147483647;
+      return (randomSeed - 1) / 2147483646;
+    }
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x554331, roughness: 1 });
+    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x426b4c, roughness: 1 });
+    const treeTrunkGeometry = new THREE.CylinderGeometry(.7, 1.1, 9, 6);
+    const treeTopGeometry = new THREE.ConeGeometry(5.5, 17, 7);
+    const trunks = new THREE.InstancedMesh(treeTrunkGeometry, trunkMat, 420);
+    const treetops = new THREE.InstancedMesh(treeTopGeometry, leavesMat, 420);
+    trunks.castShadow = true;
+    treetops.castShadow = true;
+    const treeMatrix = new THREE.Object3D();
+    let treeCount = 0;
+    for (let i = 0; i < 420; i++) {
+      const x = (random() - .5) * 5000;
+      const z = (random() - .5) * 5000;
+      if (Math.abs(x) < 280 && Math.abs(z) < 900) continue;
+      const y = terrainHeight(x, z);
+      const scale = .65 + random() * .8;
+      treeMatrix.position.set(x, y + 4.5 * scale, z);
+      treeMatrix.scale.setScalar(scale);
+      treeMatrix.rotation.y = random() * Math.PI;
+      treeMatrix.updateMatrix();
+      trunks.setMatrixAt(treeCount, treeMatrix.matrix);
+      treeMatrix.position.y = y + 14 * scale;
+      treeMatrix.updateMatrix();
+      treetops.setMatrixAt(treeCount, treeMatrix.matrix);
+      treeCount++;
+    }
+    trunks.count = treeCount;
+    treetops.count = treeCount;
+    scene.add(trunks, treetops);
+
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: .88 });
+    for (let i = 0; i < 24; i++) {
+      const cloud = new THREE.Group();
+      const x = (random() - .5) * 8000;
+      const y = 230 + random() * 260;
+      const z = (random() - .5) * 8000;
+      const puffCount = 3 + Math.floor(random() * 4);
+      for (let j = 0; j < puffCount; j++) {
+        const radius = 16 + random() * 24;
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 9), cloudMat);
+        puff.position.set((random() - .5) * 52, (random() - .5) * 12, (random() - .5) * 35);
+        puff.scale.y = .6;
+        cloud.add(puff);
+      }
+      cloud.position.set(x, y, z);
+      scene.add(cloud);
+    }
+
+    const aircraft = new THREE.Group();
+    scene.add(aircraft);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe7edf1, roughness: .34, metalness: .24 });
+    const wingMat = new THREE.MeshStandardMaterial({ color: 0xf2f5f3, roughness: .42, metalness: .16 });
+    const accentMat = new THREE.MeshStandardMaterial({ color: 0x10a9bd, roughness: .36, metalness: .22 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x172b37, roughness: .38, metalness: .2 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x65c5dd, metalness: .5, roughness: .15 });
+
+    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(.56, .86, 8.6, 14), bodyMat);
+    fuselage.rotation.x = -Math.PI / 2;
+    fuselage.position.z = .1;
+    fuselage.castShadow = true;
+    aircraft.add(fuselage);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(.56, 2.2, 14), accentMat);
+    nose.rotation.x = -Math.PI / 2;
+    nose.position.z = -5.25;
+    nose.castShadow = true;
+    aircraft.add(nose);
+    box(aircraft, 13.8, .26, 2.3, wingMat, 0, .05, -.35);
+    box(aircraft, 4.6, .18, 1.45, wingMat, 0, .14, 3.45);
+    box(aircraft, .25, 1.6, 1.5, accentMat, 0, .82, 3.5);
+    box(aircraft, 1.1, .2, 2.2, accentMat, 0, .34, 1.9);
+    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), glassMat);
+    cockpit.scale.set(.67, .48, 1.42);
+    cockpit.position.set(0, .63, -.72);
+    aircraft.add(cockpit);
+    for (const side of [-1, 1]) {
+      box(aircraft, .12, .9, .12, darkMat, side * 1.15, -.52, .48);
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(.42, .42, .2, 12), darkMat);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(side * 1.15, -.98, .48);
+      aircraft.add(wheel);
+    }
+    const propeller = new THREE.Group();
+    propeller.position.z = -6.35;
+    const propBlade = box(propeller, .24, 3.4, .14, darkMat, 0, 0, 0);
+    propBlade.rotation.z = .35;
+    const propBlade2 = box(propeller, .24, 3.4, .14, darkMat, 0, 0, 0);
+    propBlade2.rotation.z = .35 + Math.PI / 2;
+    aircraft.add(propeller);
+
+    const gates = [
+      { x: 0, y: 120, z: -900 },
+      { x: 155, y: 168, z: -2300 },
+      { x: -145, y: 205, z: -3900 }
+    ];
+    const gateMeshes = [];
+    for (const [index, point] of gates.entries()) {
+      const group = new THREE.Group();
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(24, 2.2, 10, 56),
+        new THREE.MeshStandardMaterial({
+          color: index === 0 ? 0x64f0d1 : 0x79dfff,
+          emissive: index === 0 ? 0x0b705c : 0x075986,
+          emissiveIntensity: 1.2,
+          roughness: .25,
+          metalness: .35
+        })
+      );
+      group.add(ring);
+      const beacon = new THREE.PointLight(0x69eddd, 40, 150, 2);
+      group.add(beacon);
+      group.position.set(point.x, point.y, point.z);
+      scene.add(group);
+      gateMeshes.push(group);
+    }
+
+    const plane = {
+      x: 0, y: 2.2, z: 480,
+      speed: 38, throttle: 36, pitch: 0, roll: 0, heading: 0,
+      verticalSpeed: 0, fuel: 100, distance: 0,
+      flaps: false, gearDown: true, brake: false, grounded: true,
+      crashed: false, gateIndex: 0, paused: false, cameraMode: 0
+    };
+    const input = {
+      pitchUp: false, pitchDown: false, rollLeft: false, rollRight: false,
+      rudderLeft: false, rudderRight: false, throttleUp: false, throttleDown: false, brake: false
+    };
+    const ui = {
+      speed: document.getElementById('speed'),
+      altitude: document.getElementById('altitude'),
+      verticalSpeed: document.getElementById('vertical-speed'),
+      distance: document.getElementById('distance'),
+      throttle: document.getElementById('throttle'),
+      throttleLabel: document.getElementById('throttle-label'),
+      throttleFill: document.getElementById('throttle-fill'),
+      fuel: document.getElementById('fuel'),
+      flaps: document.getElementById('flaps'),
+      gear: document.getElementById('gear'),
+      heading: document.getElementById('heading'),
+      cardinal: document.getElementById('cardinal'),
+      status: document.getElementById('status'),
+      missionTitle: document.getElementById('mission-title'),
+      missionDetail: document.getElementById('mission-detail'),
+      missionProgress: document.getElementById('mission-progress'),
+      overlay: document.getElementById('overlay'),
+      overlayTitle: document.getElementById('overlay-title'),
+      overlayCopy: document.getElementById('overlay-copy'),
+      overlayAction: document.getElementById('overlay-action'),
+      overlayIcon: document.getElementById('overlay-icon'),
+      pauseIcon: document.getElementById('pause-icon'),
+      liveDot: document.getElementById('live-dot')
+    };
+
+    function runwayAt(x, z) {
+      return Math.abs(x) < 37 && Math.abs(z) < 660;
+    }
+
+    function groundHeightAt(x, z) {
+      return runwayAt(x, z) ? 1.05 : terrainHeight(x, z);
+    }
+
+    function changeCamera() {
+      plane.cameraMode = (plane.cameraMode + 1) % 2;
+    }
+
+    function setPaused(paused) {
       if (plane.crashed) return;
+      plane.paused = paused;
+      ui.overlay.hidden = !paused;
+      ui.overlayTitle.textContent = 'Flight paused';
+      ui.overlayCopy.textContent = 'Take a breather. Your flight is waiting.';
+      ui.overlayIcon.textContent = 'Ⅱ';
+      ui.overlayAction.textContent = 'RESUME FLIGHT';
+      ui.pauseIcon.innerHTML = paused
+        ? '<path d="m9 5 10 7-10 7V5Z" fill="currentColor"/>'
+        : '<path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>';
+      ui.liveDot.style.background = paused ? '#ffc96a' : '#72e0a1';
+      if (paused) Object.keys(input).forEach(key => { input[key] = false; });
+    }
 
-      // Throttle
-      if (keys.w) {
-        plane.throttle += 1.2;
-      } else {
-        plane.throttle -= 0.8;
-      }
+    function resetFlight() {
+      plane.x = 0;
+      plane.y = 2.2;
+      plane.z = 480;
+      plane.speed = 38;
+      plane.throttle = 36;
+      plane.pitch = 0;
+      plane.roll = 0;
+      plane.heading = 0;
+      plane.verticalSpeed = 0;
+      plane.fuel = 100;
+      plane.distance = 0;
+      plane.flaps = false;
+      plane.gearDown = true;
+      plane.brake = false;
+      plane.grounded = true;
+      plane.crashed = false;
+      plane.gateIndex = 0;
+      plane.paused = false;
+      Object.keys(input).forEach(key => { input[key] = false; });
+      ui.overlay.hidden = true;
+      document.getElementById('flaps-button').classList.remove('active');
+      document.getElementById('gear-button').classList.add('active');
+      document.getElementById('brake-button').classList.remove('active');
+      updateHud();
+    }
 
-      plane.throttle = clamp(plane.throttle, 0, 100);
+    function crash(message) {
+      plane.crashed = true;
+      plane.grounded = true;
+      plane.speed = Math.max(0, plane.speed);
+      ui.overlay.hidden = false;
+      ui.overlayTitle.textContent = 'Flight ended';
+      ui.overlayCopy.textContent = message;
+      ui.overlayIcon.textContent = '✦';
+      ui.overlayAction.textContent = 'FLY AGAIN';
+      ui.pauseIcon.innerHTML = '<path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>';
+      ui.liveDot.style.background = '#ff746b';
+    }
 
-      // Pitch control
-      if (keys.up) {
-        plane.pitch -= 0.04;
-      }
-      if (keys.down) {
-        plane.pitch += 0.04;
-      }
+    function updateFlight(dt) {
+      if (plane.paused || plane.crashed) return;
+      const oldZ = plane.z;
+      if (input.throttleUp) plane.throttle += 42 * dt;
+      if (input.throttleDown) plane.throttle -= 52 * dt;
+      plane.throttle = THREE.MathUtils.clamp(plane.throttle, 0, 100);
+      plane.brake = input.brake;
 
-      plane.pitch = clamp(plane.pitch, -1, 1);
+      const throttleForce = (plane.throttle / 100) * 24;
+      const drag = .0018 * plane.speed * plane.speed + (plane.speed > 0 ? 1.4 : 0) +
+        (plane.flaps ? 2.5 : 0) + (plane.gearDown && !plane.grounded ? 2.5 : 0);
+      plane.speed += (throttleForce - drag - (plane.brake ? 34 : 0)) * dt;
+      plane.speed = THREE.MathUtils.clamp(plane.speed, 0, 285);
 
-      // More speed when throttle higher
-      const throttleForce = plane.throttle / 100 * 1.8;
-      plane.speed += throttleForce;
+      const pitchInput = Number(input.pitchUp) - Number(input.pitchDown);
+      const rollInput = Number(input.rollLeft) - Number(input.rollRight);
+      const rudderInput = Number(input.rudderLeft) - Number(input.rudderRight);
+      plane.pitch = THREE.MathUtils.clamp(plane.pitch + pitchInput * .64 * dt - plane.pitch * .045 * dt, -.42, .48);
+      plane.roll = THREE.MathUtils.clamp(plane.roll + rollInput * 1.05 * dt - plane.roll * (rollInput ? .03 : .8) * dt, -.9, .9);
+      const turnRate = (Math.sin(plane.roll) * .68 + rudderInput * .22) * (plane.speed / 105);
+      plane.heading = (plane.heading + turnRate * dt + Math.PI * 2) % (Math.PI * 2);
 
-      // Brakes
-      if (keys.s) {
-        plane.speed -= 0.7;
-      }
-
-      // Drag from air
-      plane.speed -= 0.06 + (plane.spoiler ? 0.14 : 0);
-      plane.speed = clamp(plane.speed, 0, 130);
-
-      // Spoiler increases drag and reduces lift
-      plane.spoiler = !!keys.e;
-
-      const gravity = 0.23;
-      let lift = 0;
-
-      // Lift based on speed and pitch
-      lift = (plane.speed * 0.12) * (1.4 - Math.abs(plane.pitch) * 0.7);
-
-      // If nose points up, plane gains lift. If nose down, less lift.
-      if (plane.pitch > 0) {
-        lift *= 1.12;
-      } else if (plane.pitch < 0) {
-        lift *= 0.85;
-      }
-
-      if (plane.spoiler) {
-        lift *= 0.42;
-      }
-
-      // Vertical movement
-      plane.vy += gravity - lift;
-      plane.vy *= 0.97;
-      plane.y += plane.vy;
-
-      // Keep plane from flying too far off-screen
-      if (plane.y < 30) {
-        plane.y = 30;
-        plane.vy = 0;
-      }
-
-      // Crash if it hits the ground
-      if (plane.y + 16 >= canvas.height - ground.height) {
-        plane.y = canvas.height - ground.height - 16;
-        if (plane.speed > 25) {
-          plane.crashed = true;
+      const flapLift = plane.flaps ? 1.18 : 1;
+      const lift = Math.pow(plane.speed / 70, 2) * (9 + plane.pitch * 31) * flapLift;
+      if (plane.grounded) {
+        if (plane.speed > 57 && lift > 9.81 && plane.pitch > .055) {
+          plane.grounded = false;
+          plane.verticalSpeed = Math.max(1.5, plane.verticalSpeed);
         } else {
-          plane.vy = 0;
+          plane.y = groundHeightAt(plane.x, plane.z) + 2.2;
+          plane.verticalSpeed = 0;
+        }
+      }
+      if (!plane.grounded) {
+        plane.verticalSpeed += (lift - 9.81) * dt;
+        plane.verticalSpeed *= Math.pow(.996, dt * 60);
+        plane.y += plane.verticalSpeed * dt;
+      }
+
+      const horizontalSpeed = plane.speed * .24;
+      plane.x -= Math.sin(plane.heading) * horizontalSpeed * dt;
+      plane.z -= Math.cos(plane.heading) * horizontalSpeed * dt;
+      plane.distance += horizontalSpeed * dt / 1852;
+      plane.fuel = Math.max(0, plane.fuel - (.003 + plane.throttle * .000035) * dt);
+      if (plane.fuel <= 0) plane.throttle = Math.min(plane.throttle, 5);
+
+      if (!plane.grounded) {
+        const ground = groundHeightAt(plane.x, plane.z) + 2.2;
+        if (plane.y <= ground) {
+          const safeLanding = runwayAt(plane.x, plane.z) && plane.gearDown && plane.speed < 115 && plane.verticalSpeed > -9;
+          if (safeLanding) {
+            plane.y = ground;
+            plane.verticalSpeed = 0;
+            plane.grounded = true;
+            plane.pitch = 0;
+            plane.roll = 0;
+          } else {
+            plane.y = ground;
+            crash(plane.gearDown ? 'A hard landing. Restart and try a slower, shallower approach.' : 'Landing gear was retracted. Lower the gear before touching down.');
+          }
+        }
+      }
+      if (plane.grounded && plane.speed > 82 && !runwayAt(plane.x, plane.z)) {
+        crash('You ran out of runway. Restart and build speed before taking off.');
+      }
+
+      const gate = gates[plane.gateIndex];
+      if (gate && oldZ > gate.z && plane.z <= gate.z &&
+          Math.hypot(plane.x - gate.x, plane.y - gate.y) < 29) {
+        plane.gateIndex++;
+        if (plane.gateIndex === gates.length) {
+          ui.missionTitle.textContent = 'Flight plan complete!';
+          ui.missionDetail.textContent = 'All navigation gates cleared · Nice flying';
         }
       }
 
-      // Small forward movement over time
-      plane.x += plane.speed * 0.85;
+      aircraft.position.set(plane.x, plane.y, plane.z);
+      aircraft.rotation.order = 'YXZ';
+      aircraft.rotation.set(plane.pitch, plane.heading, plane.roll);
+      propeller.rotation.z += dt * (5 + plane.speed * .24);
+      gateMeshes.forEach((mesh, index) => {
+        const active = index === plane.gateIndex;
+        mesh.visible = index >= plane.gateIndex;
+        mesh.scale.setScalar(active ? 1 + Math.sin(performance.now() * .003) * .035 : .82);
+      });
+      updateHud();
+    }
 
-      // Wrap scenery-ish effect to keep plane moving forward
-      if (plane.x > canvas.width * 0.8) {
-        plane.x = canvas.width * 0.8;
+    function updateHud() {
+      ui.speed.textContent = Math.round(plane.speed);
+      ui.altitude.textContent = Math.max(0, Math.round((plane.y - groundHeightAt(plane.x, plane.z)) * 3.28084)).toLocaleString();
+      ui.verticalSpeed.textContent = Math.round(plane.verticalSpeed * 196.85);
+      ui.distance.textContent = plane.distance.toFixed(1);
+      ui.throttle.textContent = `${Math.round(plane.throttle)}%`;
+      ui.throttleLabel.textContent = `${Math.round(plane.throttle)}%`;
+      ui.throttleFill.style.width = `${plane.throttle}%`;
+      document.getElementById('touch-throttle').value = String(Math.round(plane.throttle));
+      document.getElementById('touch-throttle-value').textContent = `${Math.round(plane.throttle)}%`;
+      ui.fuel.textContent = `${Math.round(plane.fuel)}%`;
+      ui.flaps.textContent = plane.flaps ? '15°' : 'UP';
+      ui.gear.textContent = plane.gearDown ? 'DOWN' : 'UP';
+      const degrees = Math.round(THREE.MathUtils.radToDeg(plane.heading)) % 360;
+      ui.heading.textContent = String(degrees).padStart(3, '0');
+      ui.cardinal.textContent = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(degrees / 45) % 8];
+      if (plane.crashed) {
+        ui.status.textContent = 'Flight ended';
+        ui.status.className = 'status-pill panel danger';
+      } else if (plane.paused) {
+        ui.status.textContent = 'Paused';
+        ui.status.className = 'status-pill panel warning';
+      } else if (plane.speed < 42 && !plane.grounded) {
+        ui.status.textContent = 'STALL WARNING';
+        ui.status.className = 'status-pill panel danger';
+      } else if (plane.grounded) {
+        ui.status.textContent = plane.speed > 57 ? 'Takeoff roll' : 'On runway';
+        ui.status.className = 'status-pill panel';
+      } else {
+        ui.status.textContent = plane.verticalSpeed > 2 ? 'Climbing' : plane.verticalSpeed < -2 ? 'Descending' : 'Cruising';
+        ui.status.className = 'status-pill panel';
       }
-
-      // HUD values
-      const altitude = Math.max(0, Math.round((canvas.height - ground.height - plane.y) * 2.4));
-      altEl.textContent = altitude;
-      speedEl.textContent = Math.round(plane.speed * 7);
-      throttleEl.textContent = Math.round(plane.throttle);
-
-      // Slight pitch visually
-      plane.pitch *= 0.97;
-    }
-
-    function drawCloud(x, y, r) {
-      ctx.beginPath();
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.arc(x + r * 0.8, y - 6, r * 0.9, 0, Math.PI * 2);
-      ctx.arc(x - r * 0.8, y - 4, r * 0.85, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    function drawGround() {
-      ctx.fillStyle = '#6d8f3e';
-      ctx.fillRect(0, canvas.height - ground.height, canvas.width, ground.height);
-
-      ctx.fillStyle = '#8fbf58';
-      for (let i = 0; i < 25; i++) {
-        const x = i * 42;
-        const h = 12 + (i % 5) * 8;
-        ctx.beginPath();
-        ctx.moveTo(x, canvas.height - ground.height);
-        ctx.lineTo(x + 25, canvas.height - ground.height - h);
-        ctx.lineTo(x + 50, canvas.height - ground.height);
-        ctx.closePath();
-        ctx.fill();
+      if (plane.gateIndex < gates.length) {
+        const gate = gates[plane.gateIndex];
+        const distance = Math.max(0, Math.round(Math.hypot(plane.x - gate.x, plane.z - gate.z) / 10));
+        ui.missionTitle.textContent = 'Fly through the navigation gates';
+        ui.missionDetail.textContent = `Gate ${plane.gateIndex + 1} · ${distance} units ahead · ${gates.length - plane.gateIndex} remaining`;
       }
+      ui.missionProgress.style.width = `${plane.gateIndex / gates.length * 100}%`;
+      document.getElementById('gear-button').classList.toggle('active', plane.gearDown);
+      document.getElementById('flaps-button').classList.toggle('active', plane.flaps);
+      document.getElementById('brake-button').classList.toggle('active', plane.brake);
     }
 
-    function drawPlane() {
+    const compassCanvas = document.getElementById('compass');
+    const compassCtx = compassCanvas.getContext('2d');
+    function drawCompass() {
+      const ctx = compassCtx;
+      const width = compassCanvas.width;
+      const height = compassCanvas.height;
+      ctx.clearRect(0, 0, width, height);
       ctx.save();
-      ctx.translate(plane.x, plane.y);
-
-      // plane tilt
-      ctx.rotate(plane.pitch * 0.9);
-
-      // wings
-      ctx.fillStyle = '#2a2a2a';
-      ctx.fillRect(-28, -3, 56, 6);
-
-      // body
-      ctx.fillStyle = '#f5f5f5';
-      ctx.fillRect(-18, -6, 38, 12);
-
-      // nose
-      ctx.fillStyle = '#e74c3c';
       ctx.beginPath();
-      ctx.moveTo(18, 0);
-      ctx.lineTo(30, -8);
-      ctx.lineTo(30, 8);
+      ctx.rect(0, 0, width, height);
+      ctx.clip();
+      const center = width / 2;
+      const heading = THREE.MathUtils.radToDeg(plane.heading);
+      for (let degree = -100; degree <= 100; degree += 10) {
+        const x = center + degree * 1.08;
+        const mark = (Math.round((heading + degree + 360) % 360 / 10) * 10) % 360;
+        const major = mark % 30 === 0;
+        ctx.strokeStyle = major ? 'rgba(230,244,251,.9)' : 'rgba(230,244,251,.42)';
+        ctx.lineWidth = major ? 2 : 1;
+        ctx.beginPath();
+        ctx.moveTo(x, 8);
+        ctx.lineTo(x, major ? 22 : 16);
+        ctx.stroke();
+        if (major) {
+          const label = mark === 0 ? 'N' : mark === 90 ? 'E' : mark === 180 ? 'S' : mark === 270 ? 'W' : String(mark);
+          ctx.fillStyle = mark % 90 === 0 ? '#75e4ef' : 'rgba(230,244,251,.8)';
+          ctx.font = 'bold 12px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText(label, x, 39);
+        }
+      }
+      ctx.restore();
+      ctx.fillStyle = '#ffc96a';
+      ctx.beginPath();
+      ctx.moveTo(center, 4);
+      ctx.lineTo(center - 6, 14);
+      ctx.lineTo(center + 6, 14);
       ctx.closePath();
       ctx.fill();
-
-      // tail
-      ctx.fillStyle = '#d0d0d0';
-      ctx.fillRect(-26, -10, 10, 4);
-      ctx.fillRect(-26, 6, 10, 4);
-
-      // cockpit
-      ctx.fillStyle = '#6ec5ff';
-      ctx.fillRect(-2, -4, 10, 8);
-
-      // spoiler
-      if (plane.spoiler) {
-        ctx.fillStyle = '#ff4444';
-        ctx.fillRect(-8, -14, 16, 3);
-      }
-
-      ctx.restore();
     }
 
-    function drawSky() {
-      // sun
-      ctx.fillStyle = '#ffd65a';
+    const mapCanvas = document.getElementById('map');
+    const mapCtx = mapCanvas.getContext('2d');
+    function drawMap() {
+      const ctx = mapCtx;
+      const w = mapCanvas.width;
+      const h = mapCanvas.height;
+      ctx.fillStyle = '#122934';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = 'rgba(190,225,230,.1)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < w; x += 34) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      for (let y = 0; y < h; y += 34) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+      const scale = .055;
+      const toMap = (x, z) => ({ x: w / 2 + (x - plane.x) * scale, y: h / 2 + (z - plane.z) * scale });
+      const runwayStart = toMap(0, 650);
+      const runwayEnd = toMap(0, -650);
+      ctx.strokeStyle = 'rgba(226,233,222,.65)';
+      ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(runwayStart.x, runwayStart.y); ctx.lineTo(runwayEnd.x, runwayEnd.y); ctx.stroke();
+      for (let i = plane.gateIndex; i < gates.length; i++) {
+        const p = toMap(gates[i].x, gates[i].z);
+        if (p.x < -10 || p.x > w + 10 || p.y < -10 || p.y > h + 10) continue;
+        ctx.strokeStyle = i === plane.gateIndex ? '#75e4ef' : 'rgba(117,228,239,.38)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, i === plane.gateIndex ? 6 : 4, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.rotate(-plane.heading);
+      ctx.fillStyle = '#ffc96a';
       ctx.beginPath();
-      ctx.arc(760, 90, 38, 0, Math.PI * 2);
+      ctx.moveTo(0, -9); ctx.lineTo(6, 7); ctx.lineTo(0, 4); ctx.lineTo(-6, 7); ctx.closePath();
       ctx.fill();
+      ctx.restore();
+      document.getElementById('map-scale').textContent = `${Math.round(100 / (scale * 1852))} nm`;
+    }
 
-      // clouds
-      for (const c of clouds) {
-        drawCloud(c.x, c.y, c.r);
+    function updateCamera(dt) {
+      const forward = new THREE.Vector3(-Math.sin(plane.heading), 0, -Math.cos(plane.heading));
+      let desiredPosition;
+      let target;
+      if (plane.cameraMode === 0) {
+        desiredPosition = new THREE.Vector3(plane.x, plane.y, plane.z)
+          .addScaledVector(forward, -31)
+          .add(new THREE.Vector3(0, 10 + Math.max(0, plane.pitch * 9), 0));
+        target = new THREE.Vector3(plane.x, plane.y + 2.5, plane.z).addScaledVector(forward, 14);
+      } else {
+        desiredPosition = new THREE.Vector3(plane.x, plane.y, plane.z)
+          .addScaledVector(forward, -9)
+          .add(new THREE.Vector3(0, 3.4, 0));
+        target = new THREE.Vector3(plane.x, plane.y + 1, plane.z).addScaledVector(forward, 60);
       }
+      const blend = 1 - Math.exp(-dt * (plane.cameraMode === 0 ? 2.6 : 5));
+      camera.position.lerp(desiredPosition, blend);
+      camera.lookAt(target);
+      camera.fov = THREE.MathUtils.lerp(camera.fov, plane.cameraMode === 0 ? 62 : 75, blend);
+      camera.updateProjectionMatrix();
     }
 
-    function drawMessage() {
-      if (!plane.crashed) return;
+    const pauseButton = document.getElementById('pause-button');
+    pauseButton.addEventListener('click', () => setPaused(!plane.paused));
+    document.getElementById('camera-button').addEventListener('click', changeCamera);
+    document.getElementById('reset-button').addEventListener('click', resetFlight);
+    document.getElementById('overlay-action').addEventListener('click', () => {
+      if (plane.crashed) resetFlight();
+      else setPaused(false);
+    });
+    document.getElementById('flaps-button').addEventListener('click', () => { plane.flaps = !plane.flaps; updateHud(); });
+    document.getElementById('gear-button').addEventListener('click', () => { plane.gearDown = !plane.gearDown; updateHud(); });
+    document.getElementById('brake-button').addEventListener('pointerdown', event => { event.preventDefault(); input.brake = true; });
+    document.getElementById('brake-button').addEventListener('pointerup', () => { input.brake = false; });
+    document.getElementById('brake-button').addEventListener('pointerleave', () => { input.brake = false; });
 
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(230, 160, 440, 120);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 34px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('CRASHED', canvas.width / 2, 220);
-
-      ctx.font = '20px Arial';
-      ctx.fillText('Press R to restart', canvas.width / 2, 252);
-    }
-
-    function restart() {
-      plane.x = 150;
-      plane.y = canvas.height * 0.45;
-      plane.vx = 0;
-      plane.vy = 0;
-      plane.pitch = 0;
-      plane.throttle = 0;
-      plane.speed = 0;
-      plane.spoiler = false;
-      plane.crashed = false;
-    }
-
-    document.addEventListener('keydown', e => {
-      if (e.key === 'r' || e.key === 'R') {
-        if (plane.crashed) restart();
+    const keyBindings = {
+      ArrowUp: 'pitchUp', ArrowDown: 'pitchDown', ArrowLeft: 'rollLeft', ArrowRight: 'rollRight',
+      a: 'rudderLeft', d: 'rudderRight', w: 'throttleUp', s: 'throttleDown', ' ': 'brake'
+    };
+    window.addEventListener('keydown', event => {
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      if (key in keyBindings) {
+        event.preventDefault();
+        input[keyBindings[key]] = true;
       }
+      if (event.repeat) return;
+      if (key === 'p' || key === 'Escape') setPaused(!plane.paused);
+      if (key === 'r') resetFlight();
+      if (key === 'c') changeCamera();
+      if (key === 'f') { plane.flaps = !plane.flaps; updateHud(); }
+      if (key === 'g') { plane.gearDown = !plane.gearDown; updateHud(); }
+    });
+    window.addEventListener('keyup', event => {
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      if (key in keyBindings) input[keyBindings[key]] = false;
+    });
+    window.addEventListener('blur', () => Object.keys(input).forEach(key => { input[key] = false; }));
+
+    document.querySelectorAll('[data-control]').forEach(button => {
+      const control = button.dataset.control;
+      const release = () => { input[control] = false; button.classList.remove('pressed'); };
+      button.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        button.setPointerCapture(event.pointerId);
+        input[control] = true;
+        button.classList.add('pressed');
+      });
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      button.addEventListener('lostpointercapture', release);
+    });
+    document.querySelector('[data-action="brake"]').addEventListener('pointerdown', event => {
+      event.preventDefault();
+      input.brake = true;
+      event.currentTarget.classList.add('pressed');
+    });
+    document.querySelector('[data-action="brake"]').addEventListener('pointerup', event => {
+      input.brake = false;
+      event.currentTarget.classList.remove('pressed');
+    });
+    document.querySelector('[data-action="brake"]').addEventListener('pointercancel', event => {
+      input.brake = false;
+      event.currentTarget.classList.remove('pressed');
+    });
+    const throttleSlider = document.getElementById('touch-throttle');
+    throttleSlider.addEventListener('input', () => {
+      plane.throttle = Number(throttleSlider.value);
+      document.getElementById('touch-throttle-value').textContent = `${Math.round(plane.throttle)}%`;
+      updateHud();
     });
 
-    function loop() {
-      updatePlane();
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      drawSky();
-      drawGround();
-      drawPlane();
-
-      if (plane.crashed) {
-        drawMessage();
-      }
-
-      requestAnimationFrame(loop);
+    function resize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
     }
+    window.addEventListener('resize', resize);
 
-    loop();
+    aircraft.position.set(plane.x, plane.y, plane.z);
+    updateHud();
+    let hudTimer = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), .04);
+      updateFlight(dt);
+      updateCamera(dt);
+      renderer.render(scene, camera);
+      hudTimer += dt;
+      if (hudTimer > .12) {
+        drawCompass();
+        drawMap();
+        hudTimer = 0;
+      }
+    }
+    updateCamera(1);
+    animate();
   </script>
 </body>
 </html>
