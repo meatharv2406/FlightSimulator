@@ -270,24 +270,17 @@
         justify-content: space-between;
         pointer-events: none;
       }
-      .touch-pad { display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 46px); gap: 4px; pointer-events: auto; }
-      .touch-pad .touch-key:nth-child(1) { grid-column: 2; grid-row: 1; }
-      .touch-pad .touch-key:nth-child(2) { grid-column: 1; grid-row: 2; }
-      .touch-pad .touch-key:nth-child(3) { grid-column: 3; grid-row: 2; }
-      .touch-pad .touch-key:nth-child(4) { grid-column: 2; grid-row: 3; }
-      .touch-key {
-        display: grid;
-        place-items: center;
-        border: 1px solid rgba(255,255,255,.25);
-        border-radius: 13px;
-        background: rgba(8,20,32,.68);
-        color: #f4fbff;
-        font-size: 19px;
-        font-weight: 700;
-        user-select: none;
-        touch-action: none;
-        backdrop-filter: blur(10px);
-      }
+      .touch-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(2, 46px);
+  gap: 4px;
+}
+
+.touch-key small {
+  font-size: 8px;
+  line-height: 1;
+}
       .touch-key.pressed { border-color: var(--cyan); background: rgba(35,104,116,.85); }
       .touch-side { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: auto; }
       .touch-side .touch-key { width: 49px; height: 45px; font-size: 11px; }
