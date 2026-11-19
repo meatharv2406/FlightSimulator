@@ -205,71 +205,92 @@
       font: inherit;
       font-size: 9px;
     }
+}
+    .touch-controls {
+  display: none;
+}
 
-    .touch-controls { display: none; }
-    .overlay {
-      position: absolute;
-      z-index: 5;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      padding: 22px;
-      background: rgba(4,13,22,.48);
-      backdrop-filter: blur(5px);
-    }
-    .overlay[hidden] { display: none; }
-    .overlay-card {
-      width: min(400px, 100%);
-      padding: 28px;
-      border: 1px solid rgba(255,255,255,.17);
-      border-radius: 20px;
-      background: rgba(9,24,37,.92);
-      text-align: center;
-      box-shadow: 0 24px 80px rgba(0,0,0,.32);
-    }
-    .overlay-icon { color: var(--cyan); font-size: 32px; }
-    .overlay-card h1 { margin: 12px 0 7px; font-size: 24px; }
-    .overlay-card p { margin: 0; color: #b2c2ce; font-size: 13px; line-height: 1.6; }
-    .overlay-card .control-button { margin-top: 20px; padding: 0 20px; color: #07131f; background: var(--cyan); border: 0; }
-    #error-message { color: #ffaaa1; }
+@media (any-pointer: coarse) {
+  .touch-controls {
+    position: absolute;
+    z-index: 3;
+    right: 12px;
+    bottom: max(63px, calc(env(safe-area-inset-bottom) + 56px));
+    left: 12px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    pointer-events: none;
+  }
 
-    @media (max-width: 760px) {
-      .brand-mark { width: 34px; height: 34px; border-radius: 10px; }
-      .brand-name { font-size: 13px; }
-      .brand-sub { font-size: 8px; }
-      .topbar { top: max(10px, env(safe-area-inset-top)); left: max(11px, env(safe-area-inset-left)); right: max(11px, env(safe-area-inset-right)); }
-      .flight-data { top: 57px; left: max(10px, env(safe-area-inset-left)); width: 164px; padding: 9px; border-radius: 11px; }
-      .panel-heading { margin-bottom: 7px; font-size: 8px; }
-      .readout { min-height: 57px; padding: 7px; }
-      .readout-value { font-size: 20px; }
-      .readout-label { font-size: 8px; }
-      .secondary { padding: 5px 1px; }
-      .secondary span:first-child { font-size: 9px; }
-      .secondary strong { font-size: 10px; }
-      .throttle-wrap { margin-top: 5px; }
-      .mission { top: 57px; width: 170px; padding: 9px 10px; }
-      .mission-title { font-size: 11px; }
-      .mission-detail { font-size: 9px; }
-      .compass-panel { top: 57px; right: max(10px, env(safe-area-inset-right)); width: 120px; padding: 8px; }
-      #compass { width: 104px; height: 37px; }
-      .heading-value { font-size: 12px; }
-      .status-pill { top: 143px; right: max(10px, env(safe-area-inset-right)); padding: 6px 8px; font-size: 8px; }
-      .map-panel { bottom: max(220px, calc(env(safe-area-inset-bottom) + 210px)); left: max(10px, env(safe-area-inset-left)); width: 120px; padding: 7px; }
-      #map { width: 104px; height: 75px; margin-top: 5px; }
-      .bottom-bar { right: max(10px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); }
-      .bottom-bar .control-button { min-width: 36px; height: 36px; padding: 0 8px; font-size: 9px; }
-      .key-hint { display: none; }
-      .touch-controls {
-        position: absolute;
-        z-index: 3;
-        right: 12px;
-        bottom: max(63px, calc(env(safe-area-inset-bottom) + 56px));
-        left: 12px;
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
-        pointer-events: none;
-      }
+  .touch-pad {
+    display: grid;
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(2, 46px);
+    gap: 4px;
+    pointer-events: auto;
+  }
+
+  .touch-key {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 46px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(8, 20, 32, 0.72);
+    backdrop-filter: blur(10px);
+    color: #edf7ff;
+    cursor: pointer;
+  }
+
+  .touch-key small {
+    font-size: 8px;
+    line-height: 1;
+  }
+
+  .touch-key.pressed {
+    border-color: var(--cyan);
+    background: rgba(35, 104, 116, 0.85);
+  }
+
+  .touch-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
+  .touch-side .touch-key {
+    width: 49px;
+    height: 45px;
+    font-size: 11px;
+  }
+
+  .throttle-control {
+    width: 110px;
+    padding: 9px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(8, 20, 32, 0.72);
+    backdrop-filter: blur(10px);
+  }
+
+  .throttle-control label {
+    display: flex;
+    justify-content: space-between;
+    color: #c1d1dc;
+    font-size: 9px;
+  }
+
+  .throttle-control input {
+    width: 100%;
+    margin: 8px 0 2px;
+    accent-color: var(--cyan);
+  }
+}
       .touch-pad {
   display: grid;
   grid-template-columns: repeat(3, 48px);
@@ -407,7 +428,8 @@
       <button class="control-button" id="reset-button" type="button" title="Restart flight (R)">RESTART</button>
     </div>
 
-    <div class="touch-pad" aria-label="Flight controls">
+    <div class="touch-controls">
+      <div class="touch-pad" aria-label="Flight controls">
   <button class="touch-key" type="button" data-control="rollLeft"
           aria-label="Bank left">◀<small>BANK</small></button>
   <button class="touch-key" type="button" data-control="pitchUp"
